@@ -1,8 +1,15 @@
 package main 
 
 import (
+	"context"
 	"log"
 	"time"
+	"os"
+
+
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
 )
 
 type ScheduleTask struct { 
@@ -10,43 +17,38 @@ type ScheduleTask struct {
 	PhoneNumber string
 	Message     string
 	ExecutionTZ time.Time //the exact time this task should fire
-	IsCompleted bool
 }
 
 func main() { 
 	log.Println("⏰ Task Scheduler Engine Initializing...")
 
-	// 1.0 Create an in memory Mock Database containing 3 Scheduled tasks 
-	//We will schedule them relatively to the current time right now 
-	now := time.Now()
+	//load environtment paarameters from local sevret .env files
+	err := godotenv.Load()
+	if err != nil {
+		log.Println("Warning: no .env configuration file found. reading from system environment variables.")
+	}
 
-	taskDatabase := []ScheduleTask{ 
-		{
-				ID: 101,
-				PhoneNumber: "62121212121",
-				Message:  " [ALERT] : System health check verification reminder.",
-				ExecutionTZ: now.Add(4 * time.Second), // 4 seconds from now
-				IsCompleted: false,
-		},
-				{
-				ID: 102,
-				PhoneNumber: "62133333331",
-				Message:  " [FINANCE] : Inbound subscription renewal invoice notice.",
-				ExecutionTZ: now.Add(10 * time.Second), // 10 seconds from now
-				IsCompleted: false,
-		},
-				{
-				ID: 103,
-				PhoneNumber: "644444444444",
-				Message:  " [GENERAL] : Routine data cache collection update packet.",
-				ExecutionTZ: now.Add(20 * time.Second), // 20 seconds from now
-				IsCompleted: false,
-		},
+	dbConnectionString := os.Getenv("DATABASE_URL")
+	if dbConnectionString == "" {
+		log.Fatalf("critical Error: DATABASE_URL is missing from environtmet variables.")
+	}
 
-	} 
+	// initialize high-performance postgres connection pool
+	dbPool, err := pgxpool.New(context.Background(), dbConnectionString)
+	if err != nil {
+		log.Fatalf("unable to allocate pool resource context parameters: %v, err")
+	}
+	defer dbPool.Close()
 
+	//verify target link connection is active 
+	if err := dbPool.Ping(context.Background()); err != nil {
+		log.Fatalf("Neon cloud target link ping operation failed: %v", err)
+	}
+	log.Println("Succesfully connected to Neon serverless Psotgres Cluster!")
+
+	//Set up out rhytm clock tocker to pulse every 10 seconds
 	// 1.1 Create a native Go Ticker that triggers a pulse every 2 seconds
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop() //Cean up the ticker when the program exits
 
 	log.Println("🚀 Time-Driven Engine Online. Scanning for pending records.")
@@ -55,28 +57,58 @@ func main() {
 	// every time 2 second passes, the ticker sends a message through 'ticker.C'
 	for pulseTime := range ticker.C {
 		log.Printf("\n⏱️ [Heartbeat Clock tick]: %v", pulseTime.Format("15:04:05"))
+	
+		//Database qUERY: SCAN for uncompleted tasks where execution time is less than or equal to now
+		query := `
+				SELECT id, phone_number, message, execution_time 
+				FROM scheduled_tasks
+				WHERE is_completed = FALSE AND execution_time <= $1;
+			`
 
-		//2.1 Loop through our mock database array to scan for pending items
-		for i := 0; i < len(taskDatabase); i++ {
-		task := &taskDatabase[i] //fetch a memmory pointer to modify state fields
+		rows, err := dbPool.Query(context.Background(), query, pulseTime)
+		if err != nil {
+			log.Printf("[Database Error]: Failed to poll pending records:  %v", err)
+		    continue 
+		}
 
-		//if the task is already finished, skip past it entirely
-		if task.IsCompleted {
+		//Store slice array of tasks due in this current pulse cycle
+		var tasksDue []ScheduleTask
+
+		for rows.Next() {
+			var task ScheduleTask
+			err := rows.Scan(&task.ID, &task.PhoneNumber, &task.Message, &task.ExecutionTZ)
+			if err != nil {
+				log.Printf("[Processing Error]: Failed to scan record: %v", err)
+				continue
+			}
+			tasksDue = append(tasksDue, task)
+		}
+		rows.Close() //Close the rows iterator to free up resources
+
+		if len(tasksDue) == 0 {
+			log.Println("😴 No tasks due in this cycle. Waiting for next tick...")
 			continue
 		}
-		//Core Scheduling Condition: Check if the System clock has crossed the task exectuion deadline
-		if pulseTime.After(task.ExecutionTZ) {
-			log.Printf("🔥 [Task DUE]: Exectuion condition met for job #%d to %s", task.ID, task.PhoneNumber)
 
-			//simulate exectuing the work action
-			log.Printf("✉️ [Transmitting Message]: \"%s\"", task.Message)
-			
-			//Mark as complete so it never fires again(DB state mutation)
-			task.IsCompleted = true
-			log.Printf("✅ [State Updated]: Job #%d succesfully marked COMPLETED in memmory.", task.ID)
+		log.Printf("🔥 Found %d due tasks! Processing batch payload...", len (tasksDue))
+
+		//PROCESS BATCH PIPELINE CONCURRENTLY
+		for _, task := range tasksDue {
+			//Spawn a ligtweight goroutine to handle each task concurrently 
+			go func (t ScheduleTask) {
+				log.Printf("[Job #%d] Executing action targeted for receptionist: %s", t.ID, t.PhoneNumber)
+				log.Printf("[Job #%d] Dispatching content streamL \"%s\"", t.ID, t.Message)
+
+				//in a full production application, you would invoke the Meta Whatsapp client here.
+				// After executing, we atomically flag the record completed in the cloud database table
+				updateQuery := "UPDATE scheduled_tasks SET is_completed = TRUE WHERE id = $1"
+				_, err := dbPool.Exec(context.Background(), updateQuery, t.ID)
+				if err !=nil {
+					log.Printf("[Job #%d] Error updating database execution state: %v", t.ID, err)
+					return
+				}
+				log.Printf("✅ [Job #%d] State permanently committed as COMPLETED in cloud storage.",  t.ID)
+			}(task)
 		}
-
-	  }
 	}
-
 }
