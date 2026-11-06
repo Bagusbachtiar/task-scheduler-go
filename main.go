@@ -5,19 +5,12 @@ import (
 	"log"
 	"time"
 	"os"
-
-
+	"task-scheduler/scheduler"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 )
 
-type ScheduleTask struct { 
-	ID		  	int
-	PhoneNumber string
-	Message     string
-	ExecutionTZ time.Time //the exact time this task should fire
-}
 
 func main() { 
 	log.Println("⏰ Task Scheduler Engine Initializing...")
@@ -72,10 +65,9 @@ func main() {
 		}
 
 		//Store slice array of tasks due in this current pulse cycle
-		var tasksDue []ScheduleTask
-
+		var tasksDue []scheduler.ScheduleTask
 		for rows.Next() {
-			var task ScheduleTask
+			var task scheduler.ScheduleTask
 			err := rows.Scan(&task.ID, &task.PhoneNumber, &task.Message, &task.ExecutionTZ)
 			if err != nil {
 				log.Printf("[Processing Error]: Failed to scan record: %v", err)
@@ -94,21 +86,8 @@ func main() {
 
 		//PROCESS BATCH PIPELINE CONCURRENTLY
 		for _, task := range tasksDue {
-			//Spawn a ligtweight goroutine to handle each task concurrently 
-			go func (t ScheduleTask) {
-				log.Printf("[Job #%d] Executing action targeted for receptionist: %s", t.ID, t.PhoneNumber)
-				log.Printf("[Job #%d] Dispatching content streamL \"%s\"", t.ID, t.Message)
-
-				//in a full production application, you would invoke the Meta Whatsapp client here.
-				// After executing, we atomically flag the record completed in the cloud database table
-				updateQuery := "UPDATE scheduled_tasks SET is_completed = TRUE WHERE id = $1"
-				_, err := dbPool.Exec(context.Background(), updateQuery, t.ID)
-				if err !=nil {
-					log.Printf("[Job #%d] Error updating database execution state: %v", t.ID, err)
-					return
-				}
-				log.Printf("✅ [Job #%d] State permanently committed as COMPLETED in cloud storage.",  t.ID)
-			}(task)
+			//Spawns clean concurrent goroutine tracking calls directly to our refactored engine package 
+			go scheduler.ProcessTasks(dbPool, task)
 		}
 	}
 }
