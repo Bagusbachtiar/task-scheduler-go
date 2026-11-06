@@ -38,13 +38,36 @@ func SendWhatsAppNotification(recipientMobile string, textMessageBody string) {
 		return
 	}
 
+	// Build the complete parameter array payload to clear Meta's structural validation gate
 	requestPayload := WhatsAppTemplateRequest{
 		MessagingProduct: "whatsapp",
-		To:               "6287768346975",
+		To:               recipientMobile,
 		Type:             "template",
 	}
-	requestPayload.Template.Name = "hello_world"
+	requestPayload.Template.Name = "jaspers_market_order_confirmation_v1"
 	requestPayload.Template.Language.Code = "en_US"
+
+	// Inject the matching body components Meta's sandbox requires
+		// Inject the exact 3 text parameters Meta's template engine expects
+	requestPayload.Template.Components = []Component{
+		{
+			Type: "body",
+			Parameters: []Parameter{
+				{
+					Type: "text",
+					Text: "Bagus Bachtiar",    // Parameter 1 (Name)
+				},
+				{
+					Type: "text",
+					Text: "ORDER-9921",       // Parameter 2 (Order ID)
+				},
+				{
+					Type: "text",
+					Text: "Go Task Scheduler", // Parameter 3 (Product Name)
+				},
+			},
+		},
+	}
 
 	jsonData, err := json.Marshal(requestPayload)
 	if err != nil {

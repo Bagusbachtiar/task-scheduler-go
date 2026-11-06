@@ -10,18 +10,28 @@ type ScheduleTask struct {
 	ExecutionTZ time.Time
 }
 
-// Language structures Meta's language code payload
 type Language struct {
 	Code string `json:"code"`
 }
 
-// TemplateDetails maps the inner template fields safely
-type TemplateDetails struct {
-	Name     string   `json:"name"`
-	Language Language `json:"language"`
+// Parameter maps the internal template text parameters Meta requires
+type Parameter struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
 }
 
-// WhatsAppTemplateRequest structures the exact JSON format Meta's API expects
+// Component maps the parameter components array structure
+type Component struct {
+	Type       string      `json:"type"`
+	Parameters []Parameter `json:"parameters"`
+}
+
+type TemplateDetails struct {
+	Name       string      `json:"name"`
+	Language   Language    `json:"language"`
+	Components []Component `json:"components"` // ADDED: Matches Meta's expected array structure
+}
+
 type WhatsAppTemplateRequest struct {
 	MessagingProduct string          `json:"messaging_product"`
 	To               string          `json:"to"`
