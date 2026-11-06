@@ -38,12 +38,13 @@ func SendWhatsAppNotification(recipientMobile string, textMessageBody string) {
 		return
 	}
 
-	requestPayload := WhatsappTextRequest{
+	requestPayload := WhatsAppTemplateRequest{
 		MessagingProduct: "whatsapp",
-		To:               recipientMobile,
-		Type:             "text",
+		To:               "6287768346975",
+		Type:             "template",
 	}
-	requestPayload.Text.Body = textMessageBody
+	requestPayload.Template.Name = "hello_world"
+	requestPayload.Template.Language.Code = "en_US"
 
 	jsonData, err := json.Marshal(requestPayload)
 	if err != nil {

@@ -2,20 +2,29 @@ package scheduler
 
 import "time"
 
-//ScheduleTask matches our neon Cloud Database Schema Layout
+// ScheduleTask matches our Neon Cloud Database Schema layout
 type ScheduleTask struct {
-	ID 		 int
+	ID          int
 	PhoneNumber string
 	Message     string
-	ExecutionTZ time.Time //the exact time this task should fire
+	ExecutionTZ time.Time
 }
 
-//WhatsappTextRequest structures the JSON payload for the Whatsapp Cloud API
-type WhatsappTextRequest struct {
-	MessagingProduct string `json:"messaging_product"`
-	To               string `json:"to"`
-	Type             string `json:"type"`
-	Text             struct {
-		Body string `json:"body"`
-	} `json:"text"`
+// Language structures Meta's language code payload
+type Language struct {
+	Code string `json:"code"`
+}
+
+// TemplateDetails maps the inner template fields safely
+type TemplateDetails struct {
+	Name     string   `json:"name"`
+	Language Language `json:"language"`
+}
+
+// WhatsAppTemplateRequest structures the exact JSON format Meta's API expects
+type WhatsAppTemplateRequest struct {
+	MessagingProduct string          `json:"messaging_product"`
+	To               string          `json:"to"`
+	Type             string          `json:"type"`
+	Template         TemplateDetails `json:"template"`
 }
